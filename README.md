@@ -1,3 +1,11 @@
+# ⚠️ Archived Project ⚠️
+
+This was a fun little hack when I threw it together but I have since had to archive the project because I didn't have time to maintain it, review issues and diagnose bugs etc.
+
+Since then, [@TheDauntless](https://github.com/TheDauntless) and [@jseigelis](https://github.com/jseigelis) have done a bunch of work on the script 👍
+
+Go check out their fork for a more up-to-date and actively maintained version of this script: https://github.com/TheDauntless/patch-apk.
+
 # patch-apk - App Bundle/Split APK Aware Patcher for Objection #
 An APK patcher, for use with [objection](https://github.com/sensepost/objection), that supports Android app bundles/split APKs. It automates the following:
 
