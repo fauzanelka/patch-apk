@@ -246,9 +246,19 @@ def run_command(
     return result
 
 
+def _apktool_uses_bat() -> bool:
+    """Return True if apktool is installed as apktool.bat on Windows."""
+    return os.name == "nt" and shutil.which("apktool.bat") is not None
+
+
 def run_apktool(params: list[str]) -> None:
-    """Run apktool cross-platform, handling the Windows .bat pause hack."""
-    if os.name == "nt":
+    """Run apktool cross-platform, handling the Windows .bat pause hack.
+
+    On Windows, apktool.bat executes 'pause' at the end, requiring stdin input
+    to unblock it. Only applies when apktool.bat is actually on PATH; modern
+    Windows installs may ship a plain 'apktool' wrapper instead.
+    """
+    if _apktool_uses_bat():
         cmd = ["apktool.bat"] + params
         proc = subprocess.Popen(
             cmd,
@@ -273,7 +283,7 @@ def get_objection_version() -> str:
 
 def get_apktool_version() -> str:
     """Return the installed apktool version string."""
-    if os.name == "nt":
+    if _apktool_uses_bat():
         cmd = ["apktool.bat", "-version"]
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         out, _ = proc.communicate(b"\r\n")
