@@ -246,20 +246,28 @@ def run_command(
     return result
 
 
-def _apktool_uses_bat() -> bool:
-    """Return True if apktool is installed as apktool.bat on Windows."""
-    return os.name == "nt" and shutil.which("apktool.bat") is not None
+def _windows_apktool_cmd() -> list[str]:
+    """Return the apktool command prefix to use on Windows.
+
+    Prefers apktool.bat (legacy install) because it needs a Popen stdin hack
+    to unblock its 'pause' call. Falls back to 'cmd.exe /C apktool' so that
+    cmd.exe can resolve any .cmd/.bat shim (e.g. Scoop) that Python's
+    subprocess cannot execute directly.
+    """
+    if shutil.which("apktool.bat") is not None:
+        return ["apktool.bat"]
+    return ["cmd.exe", "/C", "apktool"]
 
 
 def run_apktool(params: list[str]) -> None:
     """Run apktool cross-platform, handling the Windows .bat pause hack.
 
     On Windows, apktool.bat executes 'pause' at the end, requiring stdin input
-    to unblock it. Only applies when apktool.bat is actually on PATH; modern
-    Windows installs may ship a plain 'apktool' wrapper instead.
+    to unblock it. For other Windows install methods (Scoop, etc.) the command
+    is routed through cmd.exe which can resolve .cmd/.bat shims.
     """
-    if _apktool_uses_bat():
-        cmd = ["apktool.bat"] + params
+    if os.name == "nt":
+        cmd = _windows_apktool_cmd() + params
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -283,8 +291,8 @@ def get_objection_version() -> str:
 
 def get_apktool_version() -> str:
     """Return the installed apktool version string."""
-    if _apktool_uses_bat():
-        cmd = ["apktool.bat", "-version"]
+    if os.name == "nt":
+        cmd = _windows_apktool_cmd() + ["-version"]
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         out, _ = proc.communicate(b"\r\n")
         return out.decode("utf-8").strip().split("-")[0].strip()
