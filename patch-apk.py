@@ -322,6 +322,18 @@ def _xml_bytes(path: Path) -> io.BytesIO:
     return io.BytesIO(data)
 
 
+def _is_binary_xml(path: Path) -> bool:
+    """Return True if the file is Android binary XML (AXML format).
+
+    AXML chunks start with the RES_XML_TYPE marker 0x0003 in little-endian.
+    Text XML always starts with '<' (0x3C) or whitespace, never 0x03.
+    """
+    try:
+        return path.read_bytes()[:2] == b"\x03\x00"
+    except OSError:
+        return False
+
+
 # ─────────────────────────────────────────────
 # Section 6: DEPENDENCY / DEVICE CHECKS
 # ─────────────────────────────────────────────
@@ -469,6 +481,19 @@ def combine_split_apks(
             decode_params.append("-r")
         decode_params += [str(apk_path), "-o", str(apk_dir)]
         run_apktool(decode_params)
+
+        # apktool 3.x with -r skips converting AndroidManifest.xml from binary
+        # AXML to text XML. We need a text manifest from the base APK for the
+        # splitting/namespace edits below. Re-decode just the manifest when needed.
+        manifest_path = apk_dir / "AndroidManifest.xml"
+        if apk_path.name.endswith("base.apk") and _is_binary_xml(manifest_path):
+            logger.warning(
+                "AndroidManifest.xml is in binary XML format; re-decoding manifest only."
+            )
+            with tempfile.TemporaryDirectory() as manifest_tmp:
+                manifest_only_dir = Path(manifest_tmp) / "manifest_only"
+                run_apktool(["d", "--only-manifest", str(apk_path), "-o", str(manifest_only_dir)])
+                shutil.copy(manifest_only_dir / "AndroidManifest.xml", manifest_path)
 
         if not apk_path.name.endswith("base.apk"):
             split_apk_dirs.append(apk_dir)
