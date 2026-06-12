@@ -127,6 +127,7 @@ class Config:
     no_enable_user_certs: bool
     save_apk: Path | None
     disable_styles_hack: bool
+    apktool_decode_no_res: bool
     log_level: str
     log_format: str
     keystore_path: Path
@@ -152,6 +153,11 @@ def parse_args() -> Config:
     parser.add_argument(
         "--disable-styles-hack",
         help="Disable the styles hack that removes duplicate entries from res/values/styles.xml.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--apktool-decode-no-res",
+        help="Pass -r to apktool when decoding split APKs (do not decode resources). Use when resource decoding fails for a specific app.",
         action="store_true",
     )
     parser.add_argument(
@@ -188,6 +194,7 @@ def parse_args() -> Config:
         no_enable_user_certs=ns.no_enable_user_certs,
         save_apk=ns.save_apk,
         disable_styles_hack=ns.disable_styles_hack,
+        apktool_decode_no_res=ns.apktool_decode_no_res,
         log_level=log_level,
         log_format=ns.log_format,
         keystore_path=script_dir / "data" / "patch-apk.keystore",
@@ -443,7 +450,11 @@ def combine_split_apks(
     for apk_path in local_apks:
         logger.info("Extracting: %s", apk_path)
         apk_dir = apk_path.with_suffix("")
-        run_apktool(["d", str(apk_path), "-o", str(apk_dir)])
+        decode_params = ["d"]
+        if cfg.apktool_decode_no_res:
+            decode_params.append("-r")
+        decode_params += [str(apk_path), "-o", str(apk_dir)]
+        run_apktool(decode_params)
 
         if not apk_path.name.endswith("base.apk"):
             split_apk_dirs.append(apk_dir)
