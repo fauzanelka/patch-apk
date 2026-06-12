@@ -8,6 +8,7 @@ from __future__ import annotations
 # ─────────────────────────────────────────────
 import argparse
 import datetime
+import io
 import json
 import logging
 import os
@@ -308,6 +309,19 @@ def get_apktool_version() -> str:
         return result.stdout.decode("utf-8").strip().split("-")[0].strip()
 
 
+def _xml_bytes(path: Path) -> io.BytesIO:
+    """Read an XML file as bytes, stripping a leading UTF-8 BOM if present.
+
+    Python's expat-based ElementTree parser rejects a UTF-8 BOM at position 0
+    when reading by filename. Stripping it here and passing a BytesIO keeps all
+    parse/iterparse call sites BOM-safe without touching the file on disk.
+    """
+    data = path.read_bytes()
+    if data.startswith(b"\xef\xbb\xbf"):
+        data = data[3:]
+    return io.BytesIO(data)
+
+
 # ─────────────────────────────────────────────
 # Section 6: DEPENDENCY / DEVICE CHECKS
 # ─────────────────────────────────────────────
@@ -570,7 +584,7 @@ def fix_public_resource_ids(base_apk_dir: Path, split_apk_dirs: list[Path]) -> N
     id_to_dummy_name: dict[str, str] = {}
     dummy_name_to_real_name: dict[str, str | None] = {}
 
-    base_xml_tree = xml.etree.ElementTree.parse(public_xml)
+    base_xml_tree = xml.etree.ElementTree.parse(_xml_bytes(public_xml))
     for el in base_xml_tree.getroot():
         if "name" in el.attrib and "id" in el.attrib:
             if el.attrib["name"].startswith("APKTOOL_DUMMY_") and el.attrib["name"] not in id_to_dummy_name:
@@ -582,7 +596,7 @@ def fix_public_resource_ids(base_apk_dir: Path, split_apk_dirs: list[Path]) -> N
     for split_dir in split_apk_dirs:
         split_public_xml = split_dir / "res" / "values" / "public.xml"
         if split_public_xml.exists():
-            tree = xml.etree.ElementTree.parse(split_public_xml)
+            tree = xml.etree.ElementTree.parse(_xml_bytes(split_public_xml))
             for el in tree.getroot():
                 if "name" in el.attrib and "id" in el.attrib:
                     if el.attrib["id"] in id_to_dummy_name:
@@ -603,7 +617,7 @@ def fix_public_resource_ids(base_apk_dir: Path, split_apk_dirs: list[Path]) -> N
     manifest_path = base_apk_dir / "AndroidManifest.xml"
     namespaces = dict(
         node
-        for _, node in xml.etree.ElementTree.iterparse(str(manifest_path), events=["start-ns"])
+        for _, node in xml.etree.ElementTree.iterparse(_xml_bytes(manifest_path), events=["start-ns"])
     )
     for ns_prefix, ns_uri in namespaces.items():
         xml.etree.ElementTree.register_namespace(ns_prefix, ns_uri)
@@ -616,7 +630,7 @@ def fix_public_resource_ids(base_apk_dir: Path, split_apk_dirs: list[Path]) -> N
             file_path = Path(root) / f
             try:
                 logger.debug("Parsing %s", file_path)
-                tree = xml.etree.ElementTree.parse(str(file_path))
+                tree = xml.etree.ElementTree.parse(_xml_bytes(file_path))
                 changed = False
 
                 for el in tree.iter():
@@ -676,7 +690,7 @@ def hack_remove_duplicate_style_entries(base_apk_dir: Path) -> None:
     )
 
     dupes: list[tuple[xml.etree.ElementTree.Element, xml.etree.ElementTree.Element]] = []
-    tree = xml.etree.ElementTree.parse(str(styles_xml))
+    tree = xml.etree.ElementTree.parse(_xml_bytes(styles_xml))
 
     for style_el in tree.getroot().findall("style"):
         seen_names: list[str] = []
@@ -709,13 +723,13 @@ def disable_apk_splitting(base_apk_dir: Path) -> None:
 
     namespaces = dict(
         node
-        for _, node in xml.etree.ElementTree.iterparse(str(manifest_path), events=["start-ns"])
+        for _, node in xml.etree.ElementTree.iterparse(_xml_bytes(manifest_path), events=["start-ns"])
     )
     for ns_prefix, ns_uri in namespaces.items():
         xml.etree.ElementTree.register_namespace(ns_prefix, ns_uri)
     android_ns = "{" + namespaces["android"] + "}"
 
-    tree = xml.etree.ElementTree.parse(str(manifest_path))
+    tree = xml.etree.ElementTree.parse(_xml_bytes(manifest_path))
     app_el: xml.etree.ElementTree.Element | None = None
     els_to_remove: list[xml.etree.ElementTree.Element] = []
 
@@ -753,13 +767,13 @@ def enable_user_certs(apk_file: Path, cfg: Config) -> None:
         manifest_path = apk_dir / "AndroidManifest.xml"
         namespaces = dict(
             node
-            for _, node in xml.etree.ElementTree.iterparse(str(manifest_path), events=["start-ns"])
+            for _, node in xml.etree.ElementTree.iterparse(_xml_bytes(manifest_path), events=["start-ns"])
         )
         for ns_prefix, ns_uri in namespaces.items():
             xml.etree.ElementTree.register_namespace(ns_prefix, ns_uri)
         android_ns = "{" + namespaces["android"] + "}"
 
-        tree = xml.etree.ElementTree.parse(str(manifest_path))
+        tree = xml.etree.ElementTree.parse(_xml_bytes(manifest_path))
         for el in tree.findall("application"):
             el.attrib[android_ns + "networkSecurityConfig"] = "@xml/network_security_config"
         tree.write(str(manifest_path), encoding="utf-8", xml_declaration=True)
