@@ -511,11 +511,14 @@ def combine_split_apks(
     disable_apk_splitting(base_apk_dir)
 
     logger.info("Rebuilding as a single APK.")
-    if (base_apk_dir / "res" / "navigation").exists():
-        logger.info("Found res/navigation directory, rebuilding with 'apktool --use-aapt2'.")
-        run_apktool(["--use-aapt2", "b", str(base_apk_dir)])
-    elif _parse_version(get_apktool_version()) > _parse_version("2.4.2"):
-        logger.info("Found apktool version > 2.4.2, rebuilding with 'apktool --use-aapt2'.")
+    apktool_ver = _parse_version(get_apktool_version())
+    has_navigation = (base_apk_dir / "res" / "navigation").exists()
+    if apktool_ver >= _parse_version("3.0.0"):
+        # apktool 3.x: --use-aapt2 was removed; aapt2 is always the default.
+        logger.info("Building APK with apktool (apktool 3.x uses aapt2 by default).")
+        run_apktool(["b", str(base_apk_dir)])
+    elif apktool_ver > _parse_version("2.4.2") or has_navigation:
+        logger.info("Building APK with 'apktool --use-aapt2'.")
         run_apktool(["--use-aapt2", "b", str(base_apk_dir)])
     else:
         logger.info("Building APK with apktool.")
